@@ -12,7 +12,7 @@ cuda: 11.3
 # codeTransfer:
   type: GITHUB_PRIVATE
   repo: https://github.com/iKwesi/testing-scaletorch.git #git@github.com:k4rth33k/code_bunker.git
-  commit: 43730da169bce0abfe4d304cc16059d47de16695
+  commit: 5cab672db4307bb980124587f22dabce94c99bf
 #   credentials:
 #     GITHUB_PAT: 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
 
