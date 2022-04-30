@@ -9,7 +9,7 @@ requirements: requirements.txt
 useSpot: false
 cuda: 11.3
 
-# codeTransfer:
+codeTransfer:
   type: GITHUB_PRIVATE
   repo: https://github.com/iKwesi/testing-scaletorch.git #git@github.com:k4rth33k/code_bunker.git
   commit: 5cab672db4307bb980124587f22dabce94c99bf
