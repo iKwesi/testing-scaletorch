@@ -24,8 +24,8 @@ visualisation:
   type: AIM
   startWithJob: True
 
-# customImage:
-#   image: ubuntu:18.04
+customImage:
+  image: ubuntu:18.04
   # credentials:
   #   registry: your_registry
   #   username: username
