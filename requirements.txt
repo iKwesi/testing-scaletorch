@@ -1,3 +1,4 @@
 --extra-index-url https://download.pytorch.org/whl/cu113
 torch
 torchvision
+TensorBoard >= 2.4.1
