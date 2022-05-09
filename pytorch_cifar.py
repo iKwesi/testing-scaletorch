@@ -4,6 +4,9 @@ import logging
 import os
 import sys
 
+# import nni
+# from torch.utils.tensorboard import SummaryWriter
+
 
 import torch
 import torch.distributed as dist
@@ -14,9 +17,13 @@ import torch.utils.data
 import torch.utils.data.distributed
 from torchvision import datasets, transforms
 
-logger = logging.getLogger(__name__)
+import scaletorch as st
+st.init(verbose=None)
+
+# logger = logging.getLogger(__name__)
+logger = logging.getLogger('pytorch-cifar10')
 logger.setLevel(logging.DEBUG)
-logger.addHandler(logging.StreamHandler(sys.stdout))
+# logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
 class Net(nn.Module):
@@ -86,6 +93,9 @@ def train(args):
             loss = F.nll_loss(output, target)
             loss.backward()
             optimizer.step()
+            # adding scaletorch tracking
+            st.track(epoch=epoch, metrics={'train_loss' : loss.item()}, tuner_default='train_loss')
+
             if batch_idx % 100 == 0:
                 logger.info(
                     "Train Epoch: {} [{}/{} ({:.0f}%)] Loss: {:.6f}".format(
@@ -96,8 +106,17 @@ def train(args):
                         loss.item(),
                     )
                 )
-        test(model, test_loader)
+        test_acc = test(model, test_loader)
+        # st tracking
+        st.track(epoch, {'test_acc' : test_acc}, 'test_acc')
+        logger.debug('test accuracy %g', test_acc)
+        logger.debug('Pipe send intermediate result done.')
+        st.torch.save(model.state_dict(), 'model.pth', metadata={'test_acc' : test_acc})
+
+    logger.debug('Final result is %g', test_acc)
+    logger.debug('Send final result done.')   
     save_model(model, args.model_dir)
+    
 
 
 def test(model, test_loader):
@@ -112,11 +131,14 @@ def test(model, test_loader):
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
+    accuracy = 100.0 * correct / len(test_loader.dataset)
     logger.info(
         "Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
             test_loss, correct, len(test_loader.dataset), 100.0 * correct / len(test_loader.dataset)
         )
     )
+    
+    return accuracy
 
 
 def model_fn(model_dir):
@@ -130,46 +152,56 @@ def save_model(model, model_dir):
     logger.info("Saving the model.")
     path = os.path.join(model_dir, "model.pth")
     torch.save(model.cpu().state_dict(), path)
+    st.torch.save(model.state_dict(), 'model.pth')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    try:
+        parser = argparse.ArgumentParser()
 
-    # Data and model checkpoints directories
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=64,
-        metavar="N",
-        help="input batch size for training (default: 64)",
-    )
-    parser.add_argument(
-        "--test-batch-size",
-        type=int,
-        default=1000,
-        metavar="N",
-        help="input batch size for testing (default: 1000)",
-    )
-    parser.add_argument(
-        "--epochs",
-        type=int,
-        default=5,
-        metavar="N",
-        help="number of epochs to train (default: 10)",
-    )
-    parser.add_argument(
-        "--lr", type=float, default=0.01, metavar="LR", help="learning rate (default: 0.01)"
-    )
-    parser.add_argument(
-        "--momentum", type=float, default=0.5, metavar="M", help="SGD momentum (default: 0.5)"
-    )
-    parser.add_argument("--data-dir", type=str, default='./data', help="data directory")
+        # Data and model checkpoints directories
+        parser.add_argument(
+            "--batch-size",
+            type=int,
+            default=64,
+            metavar="N",
+            help="input batch size for training (default: 64)",
+        )
+        parser.add_argument(
+            "--test-batch-size",
+            type=int,
+            default=1000,
+            metavar="N",
+            help="input batch size for testing (default: 1000)",
+        )
+        parser.add_argument(
+            "--epochs",
+            type=int,
+            default=5,
+            metavar="N",
+            help="number of epochs to train (default: 10)",
+        )
+        parser.add_argument(
+            "--lr", type=float, default=0.01, metavar="LR", help="learning rate (default: 0.01)"
+        )
+        parser.add_argument(
+            "--momentum", type=float, default=0.5, metavar="M", help="SGD momentum (default: 0.5)"
+        )
+        parser.add_argument("--data-dir", type=str, default='./data', help="data directory")
 
-    # Container environment
-    parser.add_argument("--hosts", type=list, default=json.loads(os.environ["SM_HOSTS"]))
-    parser.add_argument("--current-host", type=str, default=os.environ["SM_CURRENT_HOST"])
-    parser.add_argument("--model-dir", type=str, default=os.environ["SM_MODEL_DIR"])
-    
-    parser.add_argument("--num-gpus", type=int, default=os.environ["SM_NUM_GPUS"])
+        # Container environment
+        parser.add_argument("--hosts", type=list, default=json.loads(os.environ["SM_HOSTS"]))
+        parser.add_argument("--current-host", type=str, default=os.environ["SM_CURRENT_HOST"])
+        parser.add_argument("--model-dir", type=str, default=os.environ["SM_MODEL_DIR"])
+        
+        parser.add_argument("--num-gpus", type=int, default=os.environ["SM_NUM_GPUS"])
 
-    train(parser.parse_args())
+        train(parser.parse_args())
+
+
+        # logger.debug(f"test_acc = {test_acc}")
+        
+
+    except Exception as exception:
+        logger.exception(exception)
+        raise
